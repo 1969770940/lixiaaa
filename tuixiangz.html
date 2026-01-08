@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>推箱子游戏</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        
+        .game-container {
+            text-align: center;
+            max-width: 100%;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+        
+        canvas {
+            border: 2px solid #333;
+            background-color: white;
+            display: block;
+            max-width: 100%;
+            height: auto;
+        }
+        
+        .controls {
+            margin-top: 15px;
+            font-size: 14px;
+            color: #666;
+            line-height: 1.5;
+        }
+        
+        .instructions {
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            margin-top: 20px;
+            max-width: 600px;
+            text-align: left;
+        }
+        
+        .instructions h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        
+        .instructions ul {
+            padding-left: 20px;
+        }
+        
+        .instructions li {
+            margin-bottom: 5px;
+        }
+        
+        @media (max-width: 620px) {
+            canvas {
+                width: 100%;
+                height: auto;
+            }
+            
+            .game-container {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>推箱子游戏</h1>
+        <canvas id="gameCanvas" width="600" height="600"></canvas>
+        <div class="controls">
+            <p>使用方向键移动，点击鼠标移动，按R键重新开始当前关卡</p>
+        </div>
+        
+        <div class="instructions">
+            <h3>游戏说明：</h3>
+            <ul>
+                <li><strong>目标：</strong>将所有箱子推到目标点（红色圆圈）上</li>
+                <li><strong>控制方式：</strong>
+                    <ul>
+                        <li>键盘：使用方向键（↑↓←→）移动玩家</li>
+                        <li>鼠标：点击想要移动到的位置</li>
+                        <li>重新开始：按R键重置当前关卡</li>
+                    </ul>
+                </li>
+                <li><strong>游戏元素：</strong>
+                    <ul>
+                        <li>蓝色圆圈：玩家</li>
+                        <li>棕色方块：箱子</li>
+                        <li>红色圆圈：目标点</li>
+                        <li>灰色方块：墙壁（不可通过）</li>
+                    </ul>
+                </li>
+                <li>当前关卡：<span id="currentLevel">1</span>/<span id="totalLevels">2</span></li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // 游戏设置
+        const SCREEN_WIDTH = 600;
+        const SCREEN_HEIGHT = 600;
+        const BLOCK_SIZE = 40;
+
+        // 颜色定义
+        const WHITE = '#FFFFFF';
+        const BLACK = '#000000';
+        const BLUE = '#0000FF';
+        const RED = '#FF0000';
+        const GREEN = '#00FF00';
+        const BROWN = '#8B4513';
+        const GRAY = '#808080';
+
+        // 关卡地图（0-空地，1-墙，2-目标点，3-箱子，4-玩家）
+        const levels = [
+            [
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+                [1, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+                [1, 0, 0, 1, 1, 1, 1, 0, 0, 1],
+                [1, 0, 0, 2, 0, 0, 1, 0, 0, 1],
+                [1, 0, 0, 3, 0, 0, 1, 0, 0, 1],
+                [1, 0, 0, 0, 3, 3, 2, 0, 0, 1],
+                [1, 0, 0, 4, 0, 0, 0, 0, 0, 1],
+                [1, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+            ],
+            [
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+                [1, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+                [1, 0, 0, 0, 0, 0, 1, 1, 1, 1],
+                [1, 0, 1, 1, 0, 0, 2, 0, 2, 1],
+                [1, 0, 1, 0, 0, 3, 3, 0, 2, 1],
+                [1, 0, 1, 0, 3, 0, 0, 0, 2, 1],
+                [1, 0, 0, 0, 1, 1, 1, 1, 1, 1],
+                [1, 0, 0, 4, 0, 0, 0, 0, 0, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+            ]
+        ];
+
+        // 游戏状态
+        let current_level = 0;
+        let player_pos = [0, 0];
+        let canvas = null;
+        let ctx = null;
+        let gameComplete = false;
+        let waitingForNextLevel = false;
+
+        // 初始化游戏
+        function init_game() {
+            // 找到玩家位置
+            for (let y = 0; y < levels[current_level].length; y++) {
+                for (let x = 0; x < levels[current_level][y].length; x++) {
+                    if (levels[current_level][y][x] === 4) {
+                        player_pos = [x, y];
+                        break;
+                    }
+                }
+            }
+            updateLevelDisplay();
+        }
+
+        // 更新关卡显示
+        function updateLevelDisplay() {
+            document.getElementById('currentLevel').textContent = current_level + 1;
+            document.getElementById('totalLevels').textContent = levels.length;
+        }
+
+        // 绘制游戏元素
+        function draw_elements() {
+            ctx.fillStyle = WHITE;
+            ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+            
+            for (let y = 0; y < levels[current_level].length; y++) {
+                for (let x = 0; x < levels[current_level][y].length; x++) {
+                    const rectX = x * BLOCK_SIZE;
+                    const rectY = y * BLOCK_SIZE;
+                    
+                    // 绘制墙
+                    if (levels[current_level][y][x] === 1) {
+                        ctx.fillStyle = GRAY;
+                        ctx.fillRect(rectX, rectY, BLOCK_SIZE, BLOCK_SIZE);
+                        ctx.strokeStyle = BLACK;
+                        ctx.lineWidth = 2;
+                        ctx.strokeRect(rectX, rectY, BLOCK_SIZE, BLOCK_SIZE);
+                    }
+                    
+                    // 绘制目标点
+                    if (levels[current_level][y][x] === 2) {
+                        ctx.fillStyle = WHITE;
+                        ctx.fillRect(rectX, rectY, BLOCK_SIZE, BLOCK_SIZE);
+                        ctx.fillStyle = RED;
+                        ctx.beginPath();
+                        ctx.arc(rectX + BLOCK_SIZE / 2, rectY + BLOCK_SIZE / 2, BLOCK_SIZE / 4, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                    
+                    // 绘制箱子
+                    if (levels[current_level][y][x] === 3) {
+                        ctx.fillStyle = BROWN;
+                        ctx.fillRect(rectX, rectY, BLOCK_SIZE, BLOCK_SIZE);
+                        ctx.strokeStyle = BLACK;
+                        ctx.lineWidth = 2;
+                        ctx.strokeRect(rectX, rectY, BLOCK_SIZE, BLOCK_SIZE);
+                    }
+                    
+                    // 绘制箱子在目标点上
+                    if (levels[current_level][y][x] === 5) {
+                        ctx.fillStyle = RED;
+                        ctx.beginPath();
+                        ctx.arc(rectX + BLOCK_SIZE / 2, rectY + BLOCK_SIZE / 2, BLOCK_SIZE / 4, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.fillStyle = BROWN;
+                        ctx.fillRect(rectX, rectY, BLOCK_SIZE, BLOCK_SIZE);
+                        ctx.strokeStyle = BLACK;
+                        ctx.lineWidth = 2;
+                        ctx.strokeRect(rectX, rectY, BLOCK_SIZE, BLOCK_SIZE);
+                    }
+                    
+                    // 绘制玩家
+                    if (levels[current_level][y][x] === 4) {
+                        ctx.fillStyle = WHITE;
+                        ctx.fillRect(rectX, rectY, BLOCK_SIZE, BLOCK_SIZE);
+                        ctx.fillStyle = BLUE;
+                        ctx.beginPath();
+                        ctx.arc(rectX + BLOCK_SIZE / 2, rectY + BLOCK_SIZE / 2, BLOCK_SIZE / 3, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                    
+                    // 绘制玩家在目标点上
+                    if (levels[current_level][y][x] === 6) {
+                        ctx.fillStyle = RED;
+                        ctx.beginPath();
+                        ctx.arc(rectX + BLOCK_SIZE / 2, rectY + BLOCK_SIZE / 2, BLOCK_SIZE / 4, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.fillStyle = BLUE;
+                        ctx.beginPath();
+                        ctx.arc(rectX + BLOCK_SIZE / 2, rectY + BLOCK_SIZE / 2, BLOCK_SIZE / 3, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+            }
+            
+            // 绘制关卡信息
+            ctx.fillStyle = BLACK;
+            ctx.font = '36px Arial';
+            ctx.fillText(`关卡: ${current_level + 1}/${levels.length}`, 10, 40);
+        }
+
+        // 检查关卡是否完成
+        function check_level_complete() {
+            for (let y = 0; y < levels[current_level].length; y++) {
+                for (let x = 0; x < levels[current_level][y].length; x++) {
+                    if (levels[current_level][y][x] === 2 || levels[current_level][y][x] === 3) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        // 移动玩家
+        function move_player(dx, dy) {
+            if (waitingForNextLevel) return;
+            
+            const new_x = player_pos[0] + dx;
+            const new_y = player_pos[1] + dy;
+            
+            // 检查新位置是否是墙
+            if (levels[current_level][new_y][new_x] === 1) {
+                return;
+            }
+            
+            // 检查新位置是否是箱子或箱子在目标点上
+            if (levels[current_level][new_y][new_x] === 3 || levels[current_level][new_y][new_x] === 5) {
+                // 箱子要移动到的位置
+                const box_new_x = new_x + dx;
+                const box_new_y = new_y + dy;
+                
+                // 检查箱子新位置是否合法
+                if (levels[current_level][box_new_y][box_new_x] === 0 || levels[current_level][box_new_y][box_new_x] === 2) {
+                    // 移动箱子
+                    if (levels[current_level][box_new_y][box_new_x] === 2) {
+                        levels[current_level][box_new_y][box_new_x] = 5;  // 箱子在目标点上
+                    } else {
+                        levels[current_level][box_new_y][box_new_x] = 3;  // 普通箱子
+                    }
+                    
+                    // 原来的箱子位置
+                    if (levels[current_level][new_y][new_x] === 5) {
+                        levels[current_level][new_y][new_x] = 2;  // 目标点
+                    } else {
+                        levels[current_level][new_y][new_x] = 0;  // 空地
+                    }
+                } else {
+                    return;
+                }
+            }
+            
+            // 移动玩家
+            const old_x = player_pos[0];
+            const old_y = player_pos[1];
+            
+            // 更新旧位置
+            if (levels[current_level][old_y][old_x] === 4) {
+                levels[current_level][old_y][old_x] = 0;
+            } else if (levels[current_level][old_y][old_x] === 6) {
+                levels[current_level][old_y][old_x] = 2;
+            }
+            
+            // 更新新位置
+            if (levels[current_level][new_y][new_x] === 2) {
+                levels[current_level][new_y][new_x] = 6;  // 玩家在目标点上
+            } else {
+                levels[current_level][new_y][new_x] = 4;  // 普通玩家位置
+            }
+            
+            // 更新玩家位置
+            player_pos = [new_x, new_y];
+        }
+
+        // 处理下一关
+        function goToNextLevel() {
+            current_level++;
+            
+            if (current_level >= levels.length) {
+                // 所有关卡完成
+                ctx.fillStyle = WHITE;
+                ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+                ctx.fillStyle = RED;
+                ctx.font = '48px Arial';
+                ctx.fillText('游戏完成！', SCREEN_WIDTH / 2 - 150, SCREEN_HEIGHT / 2 - 50);
+                
+                ctx.fillStyle = GREEN;
+                ctx.font = '36px Arial';
+                ctx.fillText('恭喜你通关了所有关卡！', SCREEN_WIDTH / 2 - 200, SCREEN_HEIGHT / 2 + 20);
+                
+                gameComplete = true;
+            } else {
+                init_game();
+                waitingForNextLevel = false;
+                gameLoop();
+            }
+        }
+
+        // 主游戏函数
+        function main() {
+            // 获取Canvas元素
+            canvas = document.getElementById('gameCanvas');
+            ctx = canvas.getContext('2d');
+            
+            init_game();
+            
+            // 键盘事件处理
+            document.addEventListener('keydown', (event) => {
+                if (waitingForNextLevel) {
+                    if (!gameComplete) {
+                        goToNextLevel();
+                    }
+                    return;
+                }
+                
+                switch(event.key) {
+                    case 'ArrowUp':
+                        move_player(0, -1);
+                        break;
+                    case 'ArrowDown':
+                        move_player(0, 1);
+                        break;
+                    case 'ArrowLeft':
+                        move_player(-1, 0);
+                        break;
+                    case 'ArrowRight':
+                        move_player(1, 0);
+                        break;
+                    case 'r':
+                    case 'R':
+                        // 重新开始当前关卡
+                        init_game();
+                        break;
+                }
+            });
+            
+            // 鼠标事件处理
+            canvas.addEventListener('click', (event) => {
+                if (waitingForNextLevel) {
+                    if (!gameComplete) {
+                        goToNextLevel();
+                    }
+                    return;
+                }
+                
+                const rect = canvas.getBoundingClientRect();
+                const mouse_x = event.clientX - rect.left;
+                const mouse_y = event.clientY - rect.top;
+                
+                const grid_x = Math.floor(mouse_x / BLOCK_SIZE);
+                const grid_y = Math.floor(mouse_y / BLOCK_SIZE);
+                
+                // 计算玩家到点击位置的方向
+                let dx = grid_x - player_pos[0];
+                let dy = grid_y - player_pos[1];
+                
+                // 只允许上下左右移动
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    dy = 0;
+                    dx = dx > 0 ? 1 : -1;
+                } else {
+                    dx = 0;
+                    dy = dy > 0 ? 1 : -1;
+                }
+                
+                move_player(dx, dy);
+            });
+            
+            // 游戏循环
+            function gameLoop() {
+                draw_elements();
+                
+                // 检查关卡是否完成
+                if (check_level_complete() && !waitingForNextLevel && !gameComplete) {
+                    // 绘制关卡完成信息
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                    ctx.fillRect(SCREEN_WIDTH / 2 - 200, SCREEN_HEIGHT / 2 - 100, 400, 150);
+                    
+                    ctx.fillStyle = GREEN;
+                    ctx.font = '48px Arial';
+                    ctx.fillText('关卡完成！', SCREEN_WIDTH / 2 - 120, SCREEN_HEIGHT / 2 - 40);
+                    
+                    ctx.fillStyle = WHITE;
+                    ctx.font = '24px Arial';
+                    ctx.fillText('按任意键或点击进入下一关', SCREEN_WIDTH / 2 - 180, SCREEN_HEIGHT / 2 + 30);
+                    
+                    waitingForNextLevel = true;
+                    
+                    // 更新关卡显示
+                    updateLevelDisplay();
+                }
+                
+                if (!gameComplete && !waitingForNextLevel) {
+                    requestAnimationFrame(gameLoop);
+                }
+            }
+            
+            gameLoop();
+        }
+
+        // 页面加载完成后开始游戏
+        window.addEventListener('load', main);
+    </script>
+</body>
+</html>
